@@ -91,13 +91,13 @@ const nextConfig = {
   experimental: {
     serverActions: {
       bodySizeLimit: '10mb',
-      timeout: 120
+      timeout: 60
     }
   },
 
   functions: {
     'api/*': {
-      maxDuration: 120
+      maxDuration: 60
     }
   }
 };

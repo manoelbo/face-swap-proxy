@@ -25,12 +25,12 @@ export async function generateFaceSwap(sourceFile: File, cardUrl: string): Promi
   try {
     // Adicionar timeout para a conexão
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 110000); // 110 segundos (100 segundos + 10 segundos de tolerância)
+    const timeoutId = setTimeout(() => controller.abort(), 55000); // 55 segundos (deixando 5 segundos de margem)
 
     console.log('Starting Gradio connection...')
     const client = await Client.connect(SPACE_NAME, {
       hf_token: HF_TOKEN,
-      timeout: 100000 // 100 segundos
+      timeout: 50000 // 50 segundos
     })
 
     console.log('Preparing card image...')
@@ -49,7 +49,7 @@ export async function generateFaceSwap(sourceFile: File, cardUrl: string): Promi
         target,
         true
       ],
-      { timeout: 100000 } // 100 segundos
+      { timeout: 50000 } // 50 segundos
     ) as PredictResult
 
     clearTimeout(timeoutId);
