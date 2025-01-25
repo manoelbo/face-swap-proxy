@@ -15,7 +15,6 @@ export async function generateFaceSwap(sourceFile: File, cardUrl: string): Promi
     throw new Error('Credenciais do Hugging Face não configuradas')
   }
 
-  // Garantir que o token comece com hf_
   const HF_TOKEN = process.env.HUGGING_FACE_TOKEN.startsWith('hf_') 
     ? (process.env.HUGGING_FACE_TOKEN as HFToken)
     : (`hf_${process.env.HUGGING_FACE_TOKEN}` as HFToken)
@@ -23,13 +22,18 @@ export async function generateFaceSwap(sourceFile: File, cardUrl: string): Promi
   const SPACE_NAME = process.env.NEXT_PUBLIC_HUGGING_FACE_SPACE
 
   try {
+    // Adicionar timeout para a conexão
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 110000); // 110 segundos
+
     console.log('Starting Gradio connection...')
     const client = await Client.connect(SPACE_NAME, {
-      hf_token: HF_TOKEN
+      hf_token: HF_TOKEN,
+      timeout: 100000 // 100 segundos
     })
 
     console.log('Preparing card image...')
-    const cardResponse = await fetch(cardUrl)
+    const cardResponse = await fetch(cardUrl, { signal: controller.signal })
     const cardBlob = await cardResponse.blob()
 
     console.log('Preparing files for upload...')
@@ -40,11 +44,14 @@ export async function generateFaceSwap(sourceFile: File, cardUrl: string): Promi
     const result = await client.predict(
       "/predict",
       [
-        source,      // source_file
-        target,      // target_file
-        true         // doFaceEnhancer
-      ]
+        source,
+        target,
+        true
+      ],
+      { timeout: 100000 } // 100 segundos
     ) as PredictResult
+
+    clearTimeout(timeoutId);
 
     console.log('Result received:', result)
 
@@ -56,6 +63,14 @@ export async function generateFaceSwap(sourceFile: File, cardUrl: string): Promi
 
   } catch (error) {
     console.error('Detailed face swap error:', error)
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        throw new Error('A operação demorou muito tempo. Por favor, tente novamente.')
+      }
+      if (error.message.includes('timeout')) {
+        throw new Error('O servidor demorou muito para responder. Por favor, tente novamente.')
+      }
+    }
     throw new Error('Falha ao gerar a imagem. Por favor, tente novamente.')
   }
 } 
