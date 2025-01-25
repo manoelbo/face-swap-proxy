@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import ImageUpload from './ImageUpload'
 import CardSearch from './CardSearch'
 import { CardPrint } from '@/services/scryfall'
-import { generateFaceSwap, checkFaceSwapStatus, startFaceSwap } from '@/services/faceswap'
+import { checkFaceSwapStatus, startFaceSwap } from '@/services/faceswap'
 import Image from 'next/image'
 
 export default function StepByStep() {
