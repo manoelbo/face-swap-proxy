@@ -1,19 +1,31 @@
-// import type { NextConfig } from "next";
-import type { Configuration as WebpackConfig } from "webpack";
+import type { NextConfig } from "next";
+import type { Configuration } from 'webpack';
 
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  webpack: (config: WebpackConfig) => {
-    config.resolve = {
-      ...config.resolve,
-      fallback: {
-        fs: false,
-        path: false,
-        stream: false,
-        zlib: false,
-        os: false,
-        buffer: false,
-      }
+const nextConfig: NextConfig = {
+  images: {
+    domains: ['*'],
+    unoptimized: true,
+    dangerouslyAllowSVG: true,
+    contentDispositionType: 'attachment',
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '*',
+        port: '',
+        pathname: '/**',
+      },
+    ],
+  },
+  webpack: (config: Configuration) => {
+    config.resolve.fallback = {
+      fs: false,
+      path: false,
+      stream: false,
+      zlib: false,
+      os: false,
+      buffer: false,
     };
     return config;
   },
@@ -24,46 +36,20 @@ const nextConfig = {
         source: '/:path*',
         headers: [
           {
-            key: 'X-Frame-Options',
-            value: 'DENY'
+            key: 'Access-Control-Allow-Origin',
+            value: '*'
           },
           {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff'
+            key: 'Access-Control-Allow-Methods',
+            value: 'GET, POST, OPTIONS'
           },
           {
-            key: 'Referrer-Policy',
-            value: 'strict-origin-when-cross-origin'
-          },
-          {
-            key: 'X-XSS-Protection',
-            value: '1; mode=block'
-          },
-          {
-            key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()'
+            key: 'Access-Control-Allow-Headers',
+            value: 'Content-Type, Authorization'
           }
         ]
       }
     ];
-  },
-
-  images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'manebrasil123-face-swap-mgt.hf.space',
-        port: '',
-        pathname: '/file/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'cards.scryfall.io',
-        port: '',
-        pathname: '/**',
-      },
-    ],
-    unoptimized: true
   },
 
   output: 'standalone',
@@ -89,4 +75,4 @@ const nextConfig = {
   }
 };
 
-module.exports = nextConfig;
+export default nextConfig;

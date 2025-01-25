@@ -123,12 +123,11 @@ export default function StepByStep() {
                       <div className="space-y-2">
                         <p className="text-gray-400 text-sm">Generated Proxy</p>
                         <div className="max-w-[300px] mx-auto">
-                          <Image
+                          <img
                             src={generatedImageUrl}
                             alt="Generated proxy card"
-                            width={200}
-                            height={200}
                             className="w-full rounded"
+                            style={{ maxWidth: '100%', height: 'auto' }}
                           />
                         </div>
                         {!error && (

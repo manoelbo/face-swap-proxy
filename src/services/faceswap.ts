@@ -4,10 +4,20 @@ import { Client, handle_file } from "@gradio/client"
 
 type HFToken = `hf_${string}`
 
-interface PredictResult {
+interface GradioResponse {
   data: Array<{
-    url: string;
-  }>;
+    path: string
+    url: string
+    size: number | null
+    orig_name: string
+    mime_type: string | null
+    is_stream: boolean
+    meta: Record<string, unknown>
+  }>
+  type: string
+  time: Date
+  endpoint: string
+  fn_index: number
 }
 
 export async function generateFaceSwap(sourceFile: File, cardUrl: string): Promise<string> {
@@ -44,18 +54,22 @@ export async function generateFaceSwap(sourceFile: File, cardUrl: string): Promi
         target,      // target_file
         true         // doFaceEnhancer
       ]
-    ) as PredictResult
+    ) as GradioResponse
 
     console.log('Result received:', result)
 
     if (!result?.data?.[0]?.url) {
-      throw new Error('Image URL not found in result')
+      throw new Error('URL da imagem não encontrada no resultado')
     }
 
-    return result.data[0].url
+    // Corrigir formatação da URL
+    const imageUrl = result.data[0].url
+
+    
+    return imageUrl
 
   } catch (error) {
-    console.error('Detailed face swap error:', error)
+    console.error('Erro detalhado no face swap:', error)
     throw new Error('Falha ao gerar a imagem. Por favor, tente novamente.')
   }
 } 
