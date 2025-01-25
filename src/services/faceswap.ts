@@ -1,6 +1,7 @@
 "use server"
 
 import { Client, handle_file } from "@gradio/client"
+import { createClient } from '@supabase/supabase-js'
 
 type HFToken = `hf_${string}`
 
@@ -27,33 +28,53 @@ interface ProcessStatus {
   error?: string;
 }
 
-// Armazenamento temporário dos status (em produção usar Redis/DB)
-const processQueue = new Map<string, ProcessStatus>();
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 export async function startFaceSwap(sourceFile: File, cardUrl: string): Promise<string> {
   const processId = crypto.randomUUID();
   
-  // Inicia o processo em background
-  processQueue.set(processId, { id: processId, status: 'pending' });
-  
-  // Não espera o processo completar
-  generateFaceSwap(sourceFile, cardUrl, processId).catch(error => {
-    processQueue.set(processId, {
+  // Cria registro no Supabase
+  await supabase
+    .from('face_swap_processes')
+    .insert({
       id: processId,
-      status: 'error',
-      error: error.message
+      status: 'pending'
     });
+  
+  // Inicia o processo em background
+  generateFaceSwap(sourceFile, cardUrl, processId).catch(async error => {
+    await supabase
+      .from('face_swap_processes')
+      .update({
+        status: 'error',
+        error: error.message
+      })
+      .eq('id', processId);
   });
 
   return processId;
 }
 
 export async function checkFaceSwapStatus(processId: string): Promise<ProcessStatus> {
-  const status = processQueue.get(processId);
-  if (!status) {
+  const { data, error } = await supabase
+    .from('face_swap_processes')
+    .select('*')
+    .eq('id', processId)
+    .single();
+
+  if (error || !data) {
     throw new Error('Processo não encontrado');
   }
-  return status;
+
+  return {
+    id: data.id,
+    status: data.status,
+    imageUrl: data.image_url,
+    error: data.error
+  };
 }
 
 async function generateFaceSwap(sourceFile: File, cardUrl: string, processId: string) {
@@ -101,22 +122,27 @@ async function generateFaceSwap(sourceFile: File, cardUrl: string, processId: st
     // Corrigir formatação da URL
     const imageUrl = result.data[0].url
 
-    // Atualiza o status com sucesso
-    processQueue.set(processId, {
-      id: processId,
-      status: 'completed',
-      imageUrl: imageUrl
-    });
+    // Atualiza o status no Supabase
+    await supabase
+      .from('face_swap_processes')
+      .update({
+        status: 'completed',
+        image_url: imageUrl
+      })
+      .eq('id', processId);
 
     return imageUrl
 
   } catch (error) {
-    // Atualiza o status com erro
-    processQueue.set(processId, {
-      id: processId,
-      status: 'error',
-      error: error instanceof Error ? error.message : 'Erro desconhecido'
-    });
+    // Atualiza o erro no Supabase
+    await supabase
+      .from('face_swap_processes')
+      .update({
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Erro desconhecido'
+      })
+      .eq('id', processId);
+
     console.error('Erro detalhado no face swap:', error)
     throw new Error('Falha ao gerar a imagem. Por favor, tente novamente.')
   }

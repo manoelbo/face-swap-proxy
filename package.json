@@ -11,6 +11,8 @@
   "dependencies": {
     "@gradio/client": "^1.10.0",
     "@next/bundle-analyzer": "^15.1.6",
+    "@supabase/supabase-js": "^2.48.1",
+    "@vercel/kv": "^3.0.0",
     "next": "15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
