@@ -10,21 +10,12 @@ interface PredictResult {
   }>;
 }
 
-interface JobStatus {
-  jobId: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
-  result?: string;
-  error?: string;
-}
-
-// Armazenar status dos jobs em memória (em produção usar Redis/DB)
-const jobStatuses = new Map<string, JobStatus>();
-
-export async function startFaceSwap(sourceFile: File, cardUrl: string): Promise<string> {
+export async function generateFaceSwap(sourceFile: File, cardUrl: string): Promise<string> {
   if (!process.env.HUGGING_FACE_TOKEN || !process.env.NEXT_PUBLIC_HUGGING_FACE_SPACE) {
     throw new Error('Credenciais do Hugging Face não configuradas')
   }
 
+  // Garantir que o token comece com hf_
   const HF_TOKEN = process.env.HUGGING_FACE_TOKEN.startsWith('hf_') 
     ? (process.env.HUGGING_FACE_TOKEN as HFToken)
     : (`hf_${process.env.HUGGING_FACE_TOKEN}` as HFToken)
@@ -32,67 +23,39 @@ export async function startFaceSwap(sourceFile: File, cardUrl: string): Promise<
   const SPACE_NAME = process.env.NEXT_PUBLIC_HUGGING_FACE_SPACE
 
   try {
+    console.log('Starting Gradio connection...')
     const client = await Client.connect(SPACE_NAME, {
       hf_token: HF_TOKEN
     })
 
-    const source = await handle_file(sourceFile)
+    console.log('Preparing card image...')
     const cardResponse = await fetch(cardUrl)
     const cardBlob = await cardResponse.blob()
+
+    console.log('Preparing files for upload...')
+    const source = await handle_file(sourceFile)
     const target = await handle_file(cardBlob)
 
-    // Iniciar job assíncrono
-    const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    
-    jobStatuses.set(jobId, {
-      jobId,
-      status: 'pending'
-    });
-
-    // Iniciar processamento em background
-    processFaceSwap(client, source, target, jobId);
-
-    return jobId;
-
-  } catch (error) {
-    console.error('Error starting face swap:', error)
-    throw new Error('Falha ao iniciar o processo. Por favor, tente novamente.')
-  }
-}
-
-async function processFaceSwap(client: any, source: any, target: any, jobId: string) {
-  try {
-    jobStatuses.set(jobId, { ...jobStatuses.get(jobId)!, status: 'processing' });
-
+    console.log('Sending request to model...')
     const result = await client.predict(
       "/predict",
-      [source, target, true]
-    ) as PredictResult;
+      [
+        source,      // source_file
+        target,      // target_file
+        true         // doFaceEnhancer
+      ]
+    ) as PredictResult
+
+    console.log('Result received:', result)
 
     if (!result?.data?.[0]?.url) {
-      throw new Error('Image URL not found in result');
+      throw new Error('Image URL not found in result')
     }
 
-    jobStatuses.set(jobId, {
-      jobId,
-      status: 'completed',
-      result: result.data[0].url
-    });
+    return result.data[0].url
 
   } catch (error) {
-    console.error(`Processing error for job ${jobId}:`, error);
-    jobStatuses.set(jobId, {
-      jobId,
-      status: 'failed',
-      error: 'Falha ao processar imagem'
-    });
+    console.error('Detailed face swap error:', error)
+    throw new Error('Falha ao gerar a imagem. Por favor, tente novamente.')
   }
-}
-
-export async function checkFaceSwapStatus(jobId: string): Promise<JobStatus> {
-  const status = jobStatuses.get(jobId);
-  if (!status) {
-    throw new Error('Job não encontrado');
-  }
-  return status;
 } 

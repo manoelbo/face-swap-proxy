@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import ImageUpload from './ImageUpload'
 import CardSearch from './CardSearch'
 import { CardPrint } from '@/services/scryfall'
-import { startFaceSwap, checkFaceSwapStatus } from '@/services/faceswap'
+import { generateFaceSwap } from '@/services/faceswap'
 import Image from 'next/image'
 
 export default function StepByStep() {
@@ -13,9 +13,6 @@ export default function StepByStep() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [result, setResult] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleImageUpload = (file: File | null) => {
     setUploadedFile(file)
@@ -24,63 +21,27 @@ export default function StepByStep() {
   const isGenerateEnabled = selectedPrint && uploadedFile
 
   const handleGenerate = async () => {
-    if (!uploadedFile || !selectedPrint?.image_uris?.normal) return;
+    if (!uploadedFile || !selectedPrint?.image_uris?.normal) return
 
-    setIsProcessing(true);
-    setError(null);
-    setResult(null);
+    setIsGenerating(true)
+    setError(null)
+    setGeneratedImageUrl(null)
 
     try {
-      const newJobId = await startFaceSwap(uploadedFile, selectedPrint.image_uris.normal);
-      setJobId(newJobId);
+      const imageUrl = await generateFaceSwap(
+        uploadedFile,
+        selectedPrint.image_uris.normal
+      )
+
+      setGeneratedImageUrl(imageUrl)
     } catch (err) {
-      setError('Falha ao iniciar o processo');
-      setIsProcessing(false);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
+      setError(`Failed to generate image: ${errorMessage}`)
+      console.error('Generation error:', err)
+    } finally {
+      setIsGenerating(false)
     }
-  };
-
-  useEffect(() => {
-    let pollInterval: NodeJS.Timeout;
-
-    const pollStatus = async () => {
-      if (!jobId) return;
-
-      try {
-        const status = await checkFaceSwapStatus(jobId);
-
-        switch (status.status) {
-          case 'completed':
-            setResult(status.result!);
-            setIsProcessing(false);
-            setJobId(null);
-            break;
-          case 'failed':
-            setError(status.error || 'Falha no processamento');
-            setIsProcessing(false);
-            setJobId(null);
-            break;
-          case 'processing':
-          case 'pending':
-            // Continua polling
-            break;
-        }
-      } catch (err) {
-        setError('Erro ao verificar status');
-        setIsProcessing(false);
-        setJobId(null);
-      }
-    };
-
-    if (jobId) {
-      pollInterval = setInterval(pollStatus, 2000); // Poll a cada 2 segundos
-    }
-
-    return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
-      }
-    };
-  }, [jobId]);
+  }
 
   return (
     <section className="py-8">
@@ -154,7 +115,7 @@ export default function StepByStep() {
               )}
 
               {/* Generated Image and Support Message */}
-              {result && (
+              {generatedImageUrl && (
                 <div className="pt-4 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Generated Image Column */}
@@ -163,7 +124,7 @@ export default function StepByStep() {
                         <p className="text-gray-400 text-sm">Generated Proxy</p>
                         <div className="max-w-[300px] mx-auto">
                           <Image
-                            src={result}
+                            src={generatedImageUrl}
                             alt="Generated proxy card"
                             width={200}
                             height={200}
@@ -172,7 +133,7 @@ export default function StepByStep() {
                         </div>
                         {!error && (
                           <a
-                            href={result}
+                            href={generatedImageUrl}
                             download="proxy-card.jpg"
                             className="block w-full text-center py-2 text-sm text-gray-400 hover:text-gray-300 
                               border border-gray-800 rounded hover:bg-gray-800/30 transition-colors"
