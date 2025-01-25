@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import ImageUpload from './ImageUpload'
 import CardSearch from './CardSearch'
 import { CardPrint } from '@/services/scryfall'
-import { generateFaceSwap } from '@/services/faceswap'
+import { generateFaceSwap, checkFaceSwapStatus, startFaceSwap } from '@/services/faceswap'
 import Image from 'next/image'
 
 export default function StepByStep() {
@@ -13,12 +13,40 @@ export default function StepByStep() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [processId, setProcessId] = useState<string | null>(null)
 
   const handleImageUpload = (file: File | null) => {
     setUploadedFile(file)
   }
 
   const isGenerateEnabled = selectedPrint && uploadedFile
+
+  useEffect(() => {
+    if (!processId || generatedImageUrl) return
+
+    const checkStatus = async () => {
+      try {
+        const status = await checkFaceSwapStatus(processId)
+
+        if (status.status === 'completed' && status.imageUrl) {
+          setGeneratedImageUrl(status.imageUrl)
+          setIsGenerating(false)
+          setProcessId(null)
+        } else if (status.status === 'error') {
+          setError(status.error || 'Erro ao gerar imagem')
+          setIsGenerating(false)
+          setProcessId(null)
+        }
+      } catch (err) {
+        setError('Erro ao verificar status')
+        setIsGenerating(false)
+        setProcessId(null)
+      }
+    }
+
+    const interval = setInterval(checkStatus, 2000)
+    return () => clearInterval(interval)
+  }, [processId, generatedImageUrl])
 
   const handleGenerate = async () => {
     if (!uploadedFile || !selectedPrint?.image_uris?.normal) return
@@ -28,17 +56,11 @@ export default function StepByStep() {
     setGeneratedImageUrl(null)
 
     try {
-      const imageUrl = await generateFaceSwap(
-        uploadedFile,
-        selectedPrint.image_uris.normal
-      )
-
-      setGeneratedImageUrl(imageUrl)
+      const id = await startFaceSwap(uploadedFile, selectedPrint.image_uris.normal)
+      setProcessId(id)
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
-      setError(`Failed to generate image: ${errorMessage}`)
-      console.error('Generation error:', err)
-    } finally {
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido'
+      setError(`Falha ao iniciar geração: ${errorMessage}`)
       setIsGenerating(false)
     }
   }

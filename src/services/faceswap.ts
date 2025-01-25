@@ -20,7 +20,43 @@ interface GradioResponse {
   fn_index: number
 }
 
-export async function generateFaceSwap(sourceFile: File, cardUrl: string): Promise<string> {
+interface ProcessStatus {
+  id: string;
+  status: 'pending' | 'completed' | 'error';
+  imageUrl?: string;
+  error?: string;
+}
+
+// Armazenamento temporário dos status (em produção usar Redis/DB)
+const processQueue = new Map<string, ProcessStatus>();
+
+export async function startFaceSwap(sourceFile: File, cardUrl: string): Promise<string> {
+  const processId = crypto.randomUUID();
+  
+  // Inicia o processo em background
+  processQueue.set(processId, { id: processId, status: 'pending' });
+  
+  // Não espera o processo completar
+  generateFaceSwap(sourceFile, cardUrl, processId).catch(error => {
+    processQueue.set(processId, {
+      id: processId,
+      status: 'error',
+      error: error.message
+    });
+  });
+
+  return processId;
+}
+
+export async function checkFaceSwapStatus(processId: string): Promise<ProcessStatus> {
+  const status = processQueue.get(processId);
+  if (!status) {
+    throw new Error('Processo não encontrado');
+  }
+  return status;
+}
+
+async function generateFaceSwap(sourceFile: File, cardUrl: string, processId: string) {
   if (!process.env.HUGGING_FACE_TOKEN || !process.env.NEXT_PUBLIC_HUGGING_FACE_SPACE) {
     throw new Error('Credenciais do Hugging Face não configuradas')
   }
@@ -65,10 +101,22 @@ export async function generateFaceSwap(sourceFile: File, cardUrl: string): Promi
     // Corrigir formatação da URL
     const imageUrl = result.data[0].url
 
-    
+    // Atualiza o status com sucesso
+    processQueue.set(processId, {
+      id: processId,
+      status: 'completed',
+      imageUrl: imageUrl
+    });
+
     return imageUrl
 
   } catch (error) {
+    // Atualiza o status com erro
+    processQueue.set(processId, {
+      id: processId,
+      status: 'error',
+      error: error instanceof Error ? error.message : 'Erro desconhecido'
+    });
     console.error('Erro detalhado no face swap:', error)
     throw new Error('Falha ao gerar a imagem. Por favor, tente novamente.')
   }
