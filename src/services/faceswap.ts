@@ -10,6 +10,7 @@ interface PredictResult {
   }>;
 }
 
+
 export async function generateFaceSwap(sourceFile: File, cardUrl: string): Promise<string> {
   if (!process.env.HUGGING_FACE_TOKEN || !process.env.NEXT_PUBLIC_HUGGING_FACE_SPACE) {
     throw new Error('Credenciais do Hugging Face não configuradas')
@@ -24,7 +25,7 @@ export async function generateFaceSwap(sourceFile: File, cardUrl: string): Promi
   try {
     // Adicionar timeout para a conexão
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 110000); // 110 segundos
+    const timeoutId = setTimeout(() => controller.abort(), 110000); // 110 segundos (100 segundos + 10 segundos de tolerância)
 
     console.log('Starting Gradio connection...')
     const client = await Client.connect(SPACE_NAME, {
