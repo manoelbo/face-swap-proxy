@@ -19,6 +19,9 @@ const nextConfig: NextConfig = {
     ],
   },
   webpack: (config: Configuration) => {
+    if (!config.resolve) {
+      config.resolve = {};
+    }
     config.resolve.fallback = {
       fs: false,
       path: false,
