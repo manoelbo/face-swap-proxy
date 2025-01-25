@@ -10,8 +10,17 @@ interface PredictResult {
   }>;
 }
 
+interface JobStatus {
+  jobId: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  result?: string;
+  error?: string;
+}
 
-export async function generateFaceSwap(sourceFile: File, cardUrl: string): Promise<string> {
+// Armazenar status dos jobs em memória (em produção usar Redis/DB)
+const jobStatuses = new Map<string, JobStatus>();
+
+export async function startFaceSwap(sourceFile: File, cardUrl: string): Promise<string> {
   if (!process.env.HUGGING_FACE_TOKEN || !process.env.NEXT_PUBLIC_HUGGING_FACE_SPACE) {
     throw new Error('Credenciais do Hugging Face não configuradas')
   }
@@ -23,55 +32,67 @@ export async function generateFaceSwap(sourceFile: File, cardUrl: string): Promi
   const SPACE_NAME = process.env.NEXT_PUBLIC_HUGGING_FACE_SPACE
 
   try {
-    // Adicionar timeout para a conexão
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 55000); // 55 segundos (deixando 5 segundos de margem)
-
-    console.log('Starting Gradio connection...')
     const client = await Client.connect(SPACE_NAME, {
-      hf_token: HF_TOKEN,
-      timeout: 50000 // 50 segundos
+      hf_token: HF_TOKEN
     })
 
-    console.log('Preparing card image...')
-    const cardResponse = await fetch(cardUrl, { signal: controller.signal })
-    const cardBlob = await cardResponse.blob()
-
-    console.log('Preparing files for upload...')
     const source = await handle_file(sourceFile)
+    const cardResponse = await fetch(cardUrl)
+    const cardBlob = await cardResponse.blob()
     const target = await handle_file(cardBlob)
 
-    console.log('Sending request to model...')
-    const result = await client.predict(
-      "/predict",
-      [
-        source,
-        target,
-        true
-      ],
-      { timeout: 50000 } // 50 segundos
-    ) as PredictResult
+    // Iniciar job assíncrono
+    const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    
+    jobStatuses.set(jobId, {
+      jobId,
+      status: 'pending'
+    });
 
-    clearTimeout(timeoutId);
+    // Iniciar processamento em background
+    processFaceSwap(client, source, target, jobId);
 
-    console.log('Result received:', result)
-
-    if (!result?.data?.[0]?.url) {
-      throw new Error('Image URL not found in result')
-    }
-
-    return result.data[0].url
+    return jobId;
 
   } catch (error) {
-    console.error('Detailed face swap error:', error)
-    if (error instanceof Error) {
-      if (error.name === 'AbortError') {
-        throw new Error('A operação demorou muito tempo. Por favor, tente novamente.')
-      }
-      if (error.message.includes('timeout')) {
-        throw new Error('O servidor demorou muito para responder. Por favor, tente novamente.')
-      }
-    }
-    throw new Error('Falha ao gerar a imagem. Por favor, tente novamente.')
+    console.error('Error starting face swap:', error)
+    throw new Error('Falha ao iniciar o processo. Por favor, tente novamente.')
   }
+}
+
+async function processFaceSwap(client: any, source: any, target: any, jobId: string) {
+  try {
+    jobStatuses.set(jobId, { ...jobStatuses.get(jobId)!, status: 'processing' });
+
+    const result = await client.predict(
+      "/predict",
+      [source, target, true]
+    ) as PredictResult;
+
+    if (!result?.data?.[0]?.url) {
+      throw new Error('Image URL not found in result');
+    }
+
+    jobStatuses.set(jobId, {
+      jobId,
+      status: 'completed',
+      result: result.data[0].url
+    });
+
+  } catch (error) {
+    console.error(`Processing error for job ${jobId}:`, error);
+    jobStatuses.set(jobId, {
+      jobId,
+      status: 'failed',
+      error: 'Falha ao processar imagem'
+    });
+  }
+}
+
+export async function checkFaceSwapStatus(jobId: string): Promise<JobStatus> {
+  const status = jobStatuses.get(jobId);
+  if (!status) {
+    throw new Error('Job não encontrado');
+  }
+  return status;
 } 

@@ -86,19 +86,6 @@ const nextConfig = {
         destination: 'https://:path*',
       },
     ]
-  },
-
-  experimental: {
-    serverActions: {
-      bodySizeLimit: '10mb',
-      timeout: 60
-    }
-  },
-
-  functions: {
-    'api/*': {
-      maxDuration: 60
-    }
   }
 };
 
